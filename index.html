@@ -62,7 +62,18 @@ button,input,select{font:inherit}
 .dayhead:first-child{margin-top:0}
 .cat{padding:9px 0}
 .cat .meta{display:flex;justify-content:space-between;gap:12px;font-weight:600}
-.cat .bar{margin:8px 0 0}
+.cat .bar{margin:8px 0 6px}
+.delta{font-size:12px;font-weight:700}
+.seg-row{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.seg{display:inline-flex;border:1px solid var(--line);border-radius:10px;overflow:hidden}
+.seg button{border:0;background:var(--bg);color:var(--text);padding:8px 16px;font-weight:600;cursor:pointer}
+.seg button.active{background:var(--accent);color:#fff}
+.legend{display:flex;gap:16px;margin-top:10px;font-size:13px;color:var(--muted)}
+.dot{display:inline-block;width:10px;height:10px;border-radius:3px;margin-right:6px}
+.c-good{fill:var(--good)}
+.c-bad{fill:var(--bad)}
+.c-muted{fill:var(--muted)}
+.c-line{stroke:var(--line)}
 .tabbar{position:fixed;left:0;right:0;bottom:0;display:flex;background:var(--card);border-top:1px solid var(--line);padding:6px 8px calc(6px + env(safe-area-inset-bottom))}
 .tabbar button{flex:1;display:flex;flex-direction:column;align-items:center;gap:3px;border:0;background:none;color:var(--muted);font-size:11px;font-weight:600;padding:6px 0;cursor:pointer}
 .tabbar .ico{width:22px;height:22px}
@@ -158,7 +169,48 @@ button,input,select{font:inherit}
       </div>
     </section>
 
-    <section id="view-statistics" class="hidden"><div class="card placeholder">Statistics are coming soon.</div></section>
+    <section id="view-statistics" class="hidden">
+      <div class="card">
+        <div id="statPresets" class="chips">
+          <button class="chip" data-preset="month">This month</button>
+          <button class="chip" data-preset="lastmonth">Last month</button>
+          <button class="chip" data-preset="30days">Last 30 days</button>
+          <button class="chip" data-preset="year">This year</button>
+          <button class="chip" data-preset="all">All time</button>
+        </div>
+        <div class="seg-row">
+          <span class="muted small">Group by</span>
+          <div id="groupSeg" class="seg">
+            <button data-group="day">Day</button>
+            <button data-group="week">Week</button>
+            <button data-group="month">Month</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="summary">
+        <div class="stat"><div class="k">Income</div><div id="stIncome" class="v pos">–</div></div>
+        <div class="stat"><div class="k">Expenses</div><div id="stExpenses" class="v neg">–</div></div>
+        <div class="stat"><div class="k">Debt payments</div><div id="stDebt" class="v">–</div></div>
+        <div class="stat"><div class="k">Net</div><div id="stNet" class="v">–</div></div>
+        <div class="stat"><div class="k">Avg spent per day</div><div id="stAvg" class="v">–</div></div>
+      </div>
+
+      <div class="grid">
+        <div class="card wide">
+          <h2>Income vs expenses</h2>
+          <div id="chartFlow"></div>
+          <div class="legend"><span><i class="dot" style="background:var(--good)"></i>Income</span><span><i class="dot" style="background:var(--bad)"></i>Expenses</span></div>
+        </div>
+        <div class="card">
+          <h2>Spending by category</h2>
+          <p id="statCatsNote" class="muted small" style="margin:0 0 6px"></p>
+          <div id="statCats"></div>
+        </div>
+        <div class="card"><h2>Largest expenses</h2><div id="statTop"></div></div>
+      </div>
+    </section>
+
     <section id="view-budget" class="hidden"><div class="card placeholder">Budget is coming soon.</div></section>
 
     <div class="foot"><button id="disconnectBtn" class="link small">Disconnect this device</button></div>
@@ -181,6 +233,8 @@ var TITLES = { home: "Home", transactions: "Transactions", statistics: "Statisti
 var TYPE_OPTIONS = [["all", "All types"], ["debt payment", "Debt payment"], ["expense", "Expense"], ["income", "Income"], ["transfer", "Transfer"]];
 var state = null;
 var filtersReady = false;
+var stat = { preset: "month", group: "day" };
+var resizeTimer = null;
 
 function $(id) {
   return document.getElementById(id);
@@ -198,6 +252,10 @@ function money(n) {
   return sign + "$" + Math.abs(n).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 }
 
+function axisMoney(n) {
+  return "$" + Math.round(n).toLocaleString("en-US");
+}
+
 function shortDate(iso) {
   var d = new Date(iso);
   if (isNaN(d.getTime())) return "";
@@ -210,6 +268,23 @@ function pad(n) {
 
 function ymd(d) {
   return d.getFullYear() + "-" + pad(d.getMonth() + 1) + "-" + pad(d.getDate());
+}
+
+function startOfDay(d) {
+  return new Date(d.getFullYear(), d.getMonth(), d.getDate());
+}
+
+function endOfDay(d) {
+  return new Date(d.getFullYear(), d.getMonth(), d.getDate(), 23, 59, 59, 999);
+}
+
+function addDays(d, n) {
+  return new Date(d.getFullYear(), d.getMonth(), d.getDate() + n);
+}
+
+function mondayOf(d) {
+  var x = startOfDay(d);
+  return addDays(x, -((x.getDay() + 6) % 7));
 }
 
 function getSetting(name) {
@@ -258,6 +333,7 @@ function showView(name) {
   });
   $("pageTitle").textContent = TITLES[name];
   window.scrollTo(0, 0);
+  if (name === "statistics" && state) renderStatistics();
 }
 
 function setStatus(text) {
@@ -299,6 +375,7 @@ function render() {
   populateFilters();
   renderHome();
   renderTransactions();
+  renderStatistics();
 }
 
 function txRowHtml(t, extra) {
@@ -563,6 +640,243 @@ function renderTransactions() {
   $("txList").innerHTML = html || '<p class="muted">No transactions match these filters.</p>';
 }
 
+function statRange() {
+  var now = new Date();
+  var today = startOfDay(now);
+  var y = now.getFullYear();
+  var m = now.getMonth();
+  if (stat.preset === "month") return { from: new Date(y, m, 1), to: endOfDay(today) };
+  if (stat.preset === "lastmonth") return { from: new Date(y, m - 1, 1), to: endOfDay(new Date(y, m, 0)) };
+  if (stat.preset === "30days") return { from: addDays(today, -29), to: endOfDay(today) };
+  if (stat.preset === "year") return { from: new Date(y, 0, 1), to: endOfDay(today) };
+  var first = today;
+  (state.transactions || []).forEach(function (t) {
+    var d = new Date(t.date);
+    if (!isNaN(d.getTime()) && d < first) first = startOfDay(d);
+  });
+  return { from: first, to: endOfDay(today) };
+}
+
+function effectiveGroup(days) {
+  var g = stat.group;
+  if (g === "day" && days > 92) g = "week";
+  if (g === "week" && days > 550) g = "month";
+  return g;
+}
+
+function newBucket(date, key) {
+  return { key: key, date: date, income: 0, expenses: 0 };
+}
+
+function bucketKeyFor(d, group) {
+  if (group === "day") return ymd(d);
+  if (group === "week") return ymd(mondayOf(d));
+  return d.getFullYear() + "-" + pad(d.getMonth() + 1);
+}
+
+function makeBuckets(from, to, group) {
+  var buckets = [];
+  var cursor;
+  if (group === "day") {
+    cursor = startOfDay(from);
+    while (cursor <= to) {
+      buckets.push(newBucket(cursor, ymd(cursor)));
+      cursor = addDays(cursor, 1);
+    }
+  } else if (group === "week") {
+    cursor = mondayOf(from);
+    while (cursor <= to) {
+      buckets.push(newBucket(cursor, ymd(cursor)));
+      cursor = addDays(cursor, 7);
+    }
+  } else {
+    cursor = new Date(from.getFullYear(), from.getMonth(), 1);
+    while (cursor <= to) {
+      buckets.push(newBucket(cursor, cursor.getFullYear() + "-" + pad(cursor.getMonth() + 1)));
+      cursor = new Date(cursor.getFullYear(), cursor.getMonth() + 1, 1);
+    }
+  }
+  return buckets;
+}
+
+function bucketLabel(b, group, multiYear) {
+  if (group === "month") {
+    return b.date.toLocaleDateString("en-US", multiYear ? { month: "short", year: "2-digit" } : { month: "short" });
+  }
+  return b.date.toLocaleDateString("en-US", { month: "short", day: "numeric" });
+}
+
+function niceMax(v) {
+  if (v <= 0) return 1;
+  var p = Math.pow(10, Math.floor(Math.log10(v)));
+  var n = v / p;
+  var f = n <= 1 ? 1 : n <= 2 ? 2 : n <= 5 ? 5 : 10;
+  return f * p;
+}
+
+function drawFlow(buckets, group, multiYear) {
+  var el = $("chartFlow");
+  var max = 0;
+  buckets.forEach(function (b) {
+    max = Math.max(max, b.income, b.expenses);
+  });
+  if (max <= 0) {
+    el.innerHTML = '<p class="muted">No income or expenses in this range.</p>';
+    return;
+  }
+
+  var w = el.clientWidth || 320;
+  var h = 230;
+  var ml = 54;
+  var mr = 6;
+  var mt = 10;
+  var mb = 26;
+  var pw = w - ml - mr;
+  var ph = h - mt - mb;
+  var yMax = niceMax(max);
+  var n = buckets.length;
+  var slot = pw / n;
+  var bw = Math.max(1, Math.min(18, slot * 0.38));
+  var rx = bw >= 6 ? 2 : 0;
+  var every = Math.max(1, Math.ceil(n / Math.max(2, Math.floor(pw / 64))));
+  var parts = [];
+
+  [0, 0.5, 1].forEach(function (f) {
+    var y = mt + ph - f * ph;
+    parts.push('<line class="c-line" x1="' + ml + '" x2="' + (w - mr) + '" y1="' + y.toFixed(1) + '" y2="' + y.toFixed(1) + '" stroke-width="1"/>');
+    parts.push('<text class="c-muted" x="' + (ml - 8) + '" y="' + (y + 4).toFixed(1) + '" text-anchor="end" font-size="11">' + axisMoney(f * yMax) + "</text>");
+  });
+
+  buckets.forEach(function (b, i) {
+    var cx = ml + slot * (i + 0.5);
+    var label = bucketLabel(b, group, multiYear);
+    var tip = (group === "week" ? "Week of " : "") + label;
+    if (b.income > 0) {
+      var ih = Math.max((b.income / yMax) * ph, 1);
+      parts.push('<rect class="c-good" x="' + (cx - bw - 0.5).toFixed(1) + '" y="' + (mt + ph - ih).toFixed(1) + '" width="' + bw.toFixed(1) + '" height="' + ih.toFixed(1) + '" rx="' + rx + '"><title>' + esc(tip + " · Income " + money(b.income)) + "</title></rect>");
+    }
+    if (b.expenses > 0) {
+      var eh = Math.max((b.expenses / yMax) * ph, 1);
+      parts.push('<rect class="c-bad" x="' + (cx + 0.5).toFixed(1) + '" y="' + (mt + ph - eh).toFixed(1) + '" width="' + bw.toFixed(1) + '" height="' + eh.toFixed(1) + '" rx="' + rx + '"><title>' + esc(tip + " · Expenses " + money(b.expenses)) + "</title></rect>");
+    }
+    if (i % every === 0) {
+      parts.push('<text class="c-muted" x="' + cx.toFixed(1) + '" y="' + (h - 8) + '" text-anchor="middle" font-size="11">' + esc(label) + "</text>");
+    }
+  });
+
+  el.innerHTML = '<svg width="' + w + '" height="' + h + '" viewBox="0 0 ' + w + " " + h + '" role="img" aria-label="Income and expenses chart">' + parts.join("") + "</svg>";
+}
+
+function catTotals(list) {
+  var totals = {};
+  list.forEach(function (t) {
+    if (String(t.type).toLowerCase() !== "expense") return;
+    var name = t.category && t.category !== "N/A" ? t.category : "Uncategorized";
+    totals[name] = (totals[name] || 0) + (t.amount || 0);
+  });
+  return totals;
+}
+
+function renderStatistics() {
+  if (!state) return;
+
+  var range = statRange();
+  var from = range.from;
+  var to = range.to;
+  var days = Math.max(1, Math.round((startOfDay(to) - startOfDay(from)) / 86400000) + 1);
+  var group = effectiveGroup(days);
+
+  document.querySelectorAll("#statPresets .chip").forEach(function (c) {
+    c.classList.toggle("active", c.dataset.preset === stat.preset);
+  });
+  document.querySelectorAll("#groupSeg button").forEach(function (b) {
+    b.classList.toggle("active", b.dataset.group === group);
+  });
+
+  var all = state.transactions || [];
+  var list = all.filter(function (t) {
+    var d = new Date(t.date);
+    return !isNaN(d.getTime()) && d >= from && d <= to;
+  });
+
+  var income = 0;
+  var expenses = 0;
+  var debt = 0;
+  list.forEach(function (t) {
+    var kind = String(t.type).toLowerCase();
+    var amount = t.amount || 0;
+    if (kind === "income") income += amount;
+    if (kind === "expense") expenses += amount;
+    if (kind === "debt payment") debt += amount;
+  });
+  var net = income - expenses - debt;
+
+  $("stIncome").textContent = money(income);
+  $("stExpenses").textContent = money(expenses);
+  $("stDebt").textContent = money(debt);
+  $("stNet").textContent = money(net);
+  $("stNet").className = "v" + (net < 0 ? " neg" : net > 0 ? " pos" : "");
+  $("stAvg").textContent = money(expenses / days);
+
+  var buckets = makeBuckets(from, to, group);
+  var index = {};
+  buckets.forEach(function (b) {
+    index[b.key] = b;
+  });
+  list.forEach(function (t) {
+    var kind = String(t.type).toLowerCase();
+    if (kind !== "income" && kind !== "expense") return;
+    var b = index[bucketKeyFor(new Date(t.date), group)];
+    if (!b) return;
+    if (kind === "income") b.income += t.amount || 0;
+    else b.expenses += t.amount || 0;
+  });
+  drawFlow(buckets, group, from.getFullYear() !== to.getFullYear());
+
+  var totals = catTotals(list);
+  var prevTotals = null;
+  if (stat.preset !== "all") {
+    var prevFrom = addDays(startOfDay(from), -days);
+    var prevTo = endOfDay(addDays(startOfDay(from), -1));
+    prevTotals = catTotals(all.filter(function (t) {
+      var d = new Date(t.date);
+      return !isNaN(d.getTime()) && d >= prevFrom && d <= prevTo;
+    }));
+  }
+  $("statCatsNote").textContent = prevTotals ? "Change compared with the previous " + days + " days." : "";
+
+  var cats = Object.keys(totals).map(function (name) {
+    return { name: name, amount: totals[name] };
+  }).sort(function (a, b) {
+    return b.amount - a.amount;
+  });
+
+  $("statCats").innerHTML = cats.map(function (c) {
+    var pct = expenses > 0 ? (c.amount / expenses) * 100 : 0;
+    var delta = "";
+    if (prevTotals) {
+      var prev = prevTotals[c.name] || 0;
+      if (prev > 0) {
+        var change = ((c.amount - prev) / prev) * 100;
+        delta = '<span class="delta ' + (change > 0 ? "neg" : "pos") + '">' + (change > 0 ? "+" : "") + change.toFixed(0) + "%</span>";
+      } else {
+        delta = '<span class="delta muted">new</span>';
+      }
+    }
+    return '<div class="cat"><div class="meta"><span>' + esc(c.name) + "</span><span>" + money(c.amount) + '</span></div><div class="bar"><div style="width:' + pct.toFixed(1) + '%"></div></div><div class="small muted" style="display:flex;justify-content:space-between"><span>' + pct.toFixed(0) + "% of expenses</span>" + delta + "</div></div>";
+  }).join("") || '<p class="muted">No expenses in this range.</p>';
+
+  var top = list.filter(function (t) {
+    return String(t.type).toLowerCase() === "expense";
+  }).sort(function (a, b) {
+    return (b.amount || 0) - (a.amount || 0);
+  }).slice(0, 5);
+
+  $("statTop").innerHTML = top.map(function (t) {
+    return txRowHtml(t, shortDate(t.date));
+  }).join("") || '<p class="muted">No expenses in this range.</p>';
+}
+
 importFromHash();
 
 document.querySelectorAll("[data-view]").forEach(function (b) {
@@ -574,6 +888,21 @@ document.querySelectorAll("[data-view]").forEach(function (b) {
 document.querySelectorAll("#presetChips .chip").forEach(function (c) {
   c.addEventListener("click", function () {
     applyPreset(c.dataset.preset);
+  });
+});
+
+document.querySelectorAll("#statPresets .chip").forEach(function (c) {
+  c.addEventListener("click", function () {
+    stat.preset = c.dataset.preset;
+    stat.group = stat.preset === "year" || stat.preset === "all" ? "month" : "day";
+    renderStatistics();
+  });
+});
+
+document.querySelectorAll("#groupSeg button").forEach(function (b) {
+  b.addEventListener("click", function () {
+    stat.group = b.dataset.group;
+    renderStatistics();
   });
 });
 
@@ -611,6 +940,13 @@ $("disconnectBtn").addEventListener("click", function () {
 
 document.addEventListener("visibilitychange", function () {
   if (!document.hidden && getSetting(KEY_URL)) loadData();
+});
+
+window.addEventListener("resize", function () {
+  clearTimeout(resizeTimer);
+  resizeTimer = setTimeout(function () {
+    if (state && !$("view-statistics").classList.contains("hidden")) renderStatistics();
+  }, 150);
 });
 
 showView("home");
