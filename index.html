@@ -1,0 +1,620 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Finances">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<title>Finances</title>
+<style>
+:root{color-scheme:light dark;--bg:#f3f5f9;--card:#ffffff;--text:#0f172a;--muted:#64748b;--line:#e5e9f0;--accent:#2563eb;--good:#15803d;--bad:#dc2626}
+@media (prefers-color-scheme:dark){:root{--bg:#0b1120;--card:#131c31;--text:#e6eaf3;--muted:#8d99b0;--line:#22304a;--accent:#6b97ff;--good:#34d399;--bad:#f87171}}
+*{box-sizing:border-box}
+html,body{margin:0;min-height:100%}
+body{background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;-webkit-font-smoothing:antialiased}
+button,input,select{font:inherit}
+.hidden{display:none !important}
+.muted{color:var(--muted)}
+.small{font-size:13px}
+.pos{color:var(--good)}
+.neg{color:var(--bad)}
+.ico{width:20px;height:20px;flex-shrink:0}
+.card{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:18px}
+.card h2{margin:0 0 6px;font-size:13px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.05em}
+.app{display:flex;min-height:100vh}
+.sidebar{display:none;width:230px;flex-shrink:0;padding:28px 16px;border-right:1px solid var(--line);position:sticky;top:0;height:100vh}
+.brand{font-weight:800;font-size:20px;padding:0 12px 24px}
+.nav button{display:flex;align-items:center;gap:12px;width:100%;padding:11px 12px;margin-bottom:4px;border:1px solid transparent;border-radius:10px;background:none;color:var(--muted);font-weight:600;cursor:pointer;text-align:left}
+.nav button.active{background:var(--card);color:var(--accent);border-color:var(--line)}
+.main{flex:1;min-width:0;padding:20px 16px calc(96px + env(safe-area-inset-bottom))}
+.top{display:flex;justify-content:space-between;align-items:center;gap:12px;margin-bottom:16px}
+.top h1{margin:0;font-size:26px}
+.top-actions{display:flex;align-items:center;gap:10px}
+.ghost{border:1px solid var(--line);background:var(--card);color:var(--text);border-radius:10px;padding:8px 12px;font-weight:600;cursor:pointer}
+.primary{width:100%;border:0;background:var(--accent);color:#fff;border-radius:12px;padding:13px;font-weight:700;cursor:pointer;margin-top:16px}
+.link{border:0;background:none;color:var(--muted);text-decoration:underline;cursor:pointer;padding:0}
+.hero{margin-bottom:16px}
+.hero .label{color:var(--muted);font-weight:600}
+.big{font-size:clamp(34px,8vw,48px);font-weight:800;letter-spacing:-.02em;margin-top:4px}
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:16px}
+.wide{grid-column:1/-1}
+.row{display:flex;justify-content:space-between;align-items:center;gap:12px;padding:11px 0;border-bottom:1px solid var(--line)}
+.row:last-child{border-bottom:0}
+.row .left{min-width:0}
+.row .name{font-weight:600}
+.row .amount{font-weight:700;white-space:nowrap}
+.bar{height:8px;border-radius:99px;background:var(--line);overflow:hidden;margin:12px 0 6px}
+.bar div{height:100%;background:var(--accent);border-radius:99px}
+.placeholder{padding:40px 20px;text-align:center;color:var(--muted)}
+.chips{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:14px}
+.chip{border:1px solid var(--line);background:var(--bg);color:var(--text);border-radius:99px;padding:7px 14px;font-weight:600;font-size:14px;cursor:pointer}
+.chip.active{background:var(--accent);border-color:var(--accent);color:#fff}
+.filter-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px}
+.filter-grid label{display:block;font-size:12px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.04em}
+.filter-grid input,.filter-grid select{display:block;width:100%;margin-top:6px;padding:10px;border:1px solid var(--line);border-radius:10px;background:var(--bg);color:var(--text);font-size:16px}
+.summary{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px;margin:16px 0}
+.stat{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:14px 16px}
+.stat .k{font-size:12px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.05em}
+.stat .v{font-size:22px;font-weight:800;margin-top:4px}
+.dayhead{margin:16px 0 2px;font-size:13px;font-weight:700;color:var(--muted)}
+.dayhead:first-child{margin-top:0}
+.cat{padding:9px 0}
+.cat .meta{display:flex;justify-content:space-between;gap:12px;font-weight:600}
+.cat .bar{margin:8px 0 0}
+.tabbar{position:fixed;left:0;right:0;bottom:0;display:flex;background:var(--card);border-top:1px solid var(--line);padding:6px 8px calc(6px + env(safe-area-inset-bottom))}
+.tabbar button{flex:1;display:flex;flex-direction:column;align-items:center;gap:3px;border:0;background:none;color:var(--muted);font-size:11px;font-weight:600;padding:6px 0;cursor:pointer}
+.tabbar .ico{width:22px;height:22px}
+.tabbar button.active{color:var(--accent)}
+.foot{margin-top:28px;text-align:center}
+.setup{min-height:100vh;display:flex;align-items:center;justify-content:center;padding:20px}
+.setup-card{width:100%;max-width:440px}
+.setup-card h1{margin:0 0 8px;font-size:24px}
+.setup-card label{display:block;margin-top:14px;font-weight:600;font-size:14px}
+.setup-card input{display:block;width:100%;margin-top:6px;padding:12px;border:1px solid var(--line);border-radius:10px;background:var(--bg);color:var(--text);font-size:16px}
+.error{color:var(--bad);min-height:20px;margin:12px 0 0;font-size:14px}
+@media (min-width:900px){.sidebar{display:block}.tabbar{display:none}.main{padding:32px 40px 48px}}
+</style>
+</head>
+<body>
+
+<div id="setup" class="setup hidden">
+  <div class="card setup-card">
+    <h1>Connect your finances</h1>
+    <p class="muted">Enter the web app URL and the secret key from your Apps Script. They are saved only on this device.</p>
+    <label>Web app URL
+      <input id="inputUrl" type="url" placeholder="https://script.google.com/macros/s/.../exec" autocomplete="off" autocapitalize="off" spellcheck="false">
+    </label>
+    <label>Secret key
+      <input id="inputKey" type="password" autocomplete="off" autocapitalize="off" spellcheck="false">
+    </label>
+    <button id="connectBtn" class="primary">Connect</button>
+    <p id="setupMessage" class="error"></p>
+  </div>
+</div>
+
+<div id="shell" class="app hidden">
+  <aside class="sidebar">
+    <div class="brand">Finances</div>
+    <nav class="nav">
+      <button data-view="home" class="active"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 11l9-8 9 8"/><path d="M5 10v10h14V10"/><path d="M10 20v-6h4v6"/></svg>Home</button>
+      <button data-view="transactions"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 6h13M8 12h13M8 18h13"/><path d="M3 6h.01M3 12h.01M3 18h.01"/></svg>Transactions</button>
+      <button data-view="statistics"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 20V11M12 20V4M18 20v-6"/><path d="M3 20h18"/></svg>Statistics</button>
+      <button data-view="budget"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="5"/><circle cx="12" cy="12" r="1"/></svg>Budget</button>
+    </nav>
+  </aside>
+
+  <main class="main">
+    <header class="top">
+      <h1 id="pageTitle">Home</h1>
+      <div class="top-actions">
+        <span id="status" class="muted small"></span>
+        <button id="refreshBtn" class="ghost">Refresh</button>
+      </div>
+    </header>
+
+    <section id="view-home">
+      <div class="card hero">
+        <div class="label">Total available</div>
+        <div id="totalAvailable" class="big">–</div>
+      </div>
+      <div class="grid">
+        <div class="card"><h2>Accounts</h2><div id="accounts"></div></div>
+        <div class="card"><h2>Credit card</h2><div id="card"></div></div>
+        <div class="card"><h2>Upcoming charges</h2><div id="upcoming"></div></div>
+        <div class="card wide"><h2>Recent transactions</h2><div id="recent"></div></div>
+      </div>
+    </section>
+
+    <section id="view-transactions" class="hidden">
+      <div class="card">
+        <div id="presetChips" class="chips">
+          <button class="chip" data-preset="month">This month</button>
+          <button class="chip" data-preset="lastmonth">Last month</button>
+          <button class="chip" data-preset="30days">Last 30 days</button>
+          <button class="chip" data-preset="year">This year</button>
+          <button class="chip" data-preset="all">All time</button>
+        </div>
+        <div class="filter-grid">
+          <label>From<input id="fFrom" type="date"></label>
+          <label>To<input id="fTo" type="date"></label>
+          <label>Type<select id="fType"></select></label>
+          <label>Account<select id="fAccount"></select></label>
+          <label>Category<select id="fCategory"></select></label>
+        </div>
+      </div>
+
+      <div class="summary">
+        <div class="stat"><div class="k">Income</div><div id="sumIncome" class="v pos">–</div></div>
+        <div class="stat"><div class="k">Expenses</div><div id="sumExpenses" class="v neg">–</div></div>
+        <div class="stat"><div class="k">Debt payments</div><div id="sumDebt" class="v">–</div></div>
+        <div class="stat"><div class="k">Net</div><div id="sumNet" class="v">–</div></div>
+      </div>
+
+      <div class="grid">
+        <div class="card"><h2>Expenses by category</h2><div id="byCategory"></div></div>
+        <div class="card wide"><h2 id="listTitle">Transactions</h2><div id="txList"></div></div>
+      </div>
+    </section>
+
+    <section id="view-statistics" class="hidden"><div class="card placeholder">Statistics are coming soon.</div></section>
+    <section id="view-budget" class="hidden"><div class="card placeholder">Budget is coming soon.</div></section>
+
+    <div class="foot"><button id="disconnectBtn" class="link small">Disconnect this device</button></div>
+  </main>
+
+  <nav class="tabbar">
+    <button data-view="home" class="active"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 11l9-8 9 8"/><path d="M5 10v10h14V10"/><path d="M10 20v-6h4v6"/></svg>Home</button>
+    <button data-view="transactions"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 6h13M8 12h13M8 18h13"/><path d="M3 6h.01M3 12h.01M3 18h.01"/></svg>Transactions</button>
+    <button data-view="statistics"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 20V11M12 20V4M18 20v-6"/><path d="M3 20h18"/></svg>Statistics</button>
+    <button data-view="budget"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="5"/><circle cx="12" cy="12" r="1"/></svg>Budget</button>
+  </nav>
+</div>
+
+<script>
+var KEY_URL = "finance_app_url";
+var KEY_KEY = "finance_app_key";
+var CARD_NAME = "didi credit card";
+var VIEWS = ["home", "transactions", "statistics", "budget"];
+var TITLES = { home: "Home", transactions: "Transactions", statistics: "Statistics", budget: "Budget" };
+var TYPE_OPTIONS = [["all", "All types"], ["debt payment", "Debt payment"], ["expense", "Expense"], ["income", "Income"], ["transfer", "Transfer"]];
+var state = null;
+var filtersReady = false;
+
+function $(id) {
+  return document.getElementById(id);
+}
+
+function esc(value) {
+  return String(value === null || value === undefined ? "" : value).replace(/[&<>"']/g, function (c) {
+    return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c];
+  });
+}
+
+function money(n) {
+  if (n === null || n === undefined || isNaN(n)) return "–";
+  var sign = n < 0 ? "-" : "";
+  return sign + "$" + Math.abs(n).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
+
+function shortDate(iso) {
+  var d = new Date(iso);
+  if (isNaN(d.getTime())) return "";
+  return d.toLocaleDateString("en-US", { month: "short", day: "numeric" });
+}
+
+function pad(n) {
+  return String(n).padStart(2, "0");
+}
+
+function ymd(d) {
+  return d.getFullYear() + "-" + pad(d.getMonth() + 1) + "-" + pad(d.getDate());
+}
+
+function getSetting(name) {
+  try {
+    return localStorage.getItem(name) || "";
+  } catch (e) {
+    return "";
+  }
+}
+
+function setSetting(name, value) {
+  try {
+    localStorage.setItem(name, value);
+  } catch (e) {}
+}
+
+function importFromHash() {
+  if (!location.hash || location.hash.length < 2) return;
+  var params = new URLSearchParams(location.hash.slice(1));
+  var url = params.get("url");
+  var key = params.get("key");
+  if (url && key) {
+    setSetting(KEY_URL, url);
+    setSetting(KEY_KEY, key);
+    history.replaceState(null, "", location.pathname + location.search);
+  }
+}
+
+function showSetup(message) {
+  $("setup").classList.remove("hidden");
+  $("shell").classList.add("hidden");
+  $("setupMessage").textContent = message || "";
+}
+
+function showApp() {
+  $("setup").classList.add("hidden");
+  $("shell").classList.remove("hidden");
+}
+
+function showView(name) {
+  VIEWS.forEach(function (v) {
+    $("view-" + v).classList.toggle("hidden", v !== name);
+  });
+  document.querySelectorAll("[data-view]").forEach(function (b) {
+    b.classList.toggle("active", b.dataset.view === name);
+  });
+  $("pageTitle").textContent = TITLES[name];
+  window.scrollTo(0, 0);
+}
+
+function setStatus(text) {
+  $("status").textContent = text;
+}
+
+async function loadData() {
+  var url = getSetting(KEY_URL);
+  var key = getSetting(KEY_KEY);
+  if (!url || !key) {
+    showSetup("");
+    return;
+  }
+  setStatus("Updating...");
+  try {
+    var res = await fetch(url + (url.indexOf("?") === -1 ? "?" : "&") + "key=" + encodeURIComponent(key) + "&action=data");
+    var json = await res.json();
+    if (json.status !== "success") {
+      if (json.message === "Unauthorized") {
+        showSetup("The secret key was not accepted.");
+        return;
+      }
+      throw new Error(json.message || "Unknown error");
+    }
+    state = json;
+    showApp();
+    render();
+    setStatus("Updated " + new Date().toLocaleTimeString([], { hour: "numeric", minute: "2-digit" }));
+  } catch (err) {
+    if (state) {
+      setStatus("Could not update");
+    } else {
+      showSetup("Could not connect: " + err.message);
+    }
+  }
+}
+
+function render() {
+  populateFilters();
+  renderHome();
+  renderTransactions();
+}
+
+function txRowHtml(t, extra) {
+  var type = String(t.type).toLowerCase();
+  var cls = "";
+  var sign = "";
+  if (type === "income") {
+    cls = " pos";
+    sign = "+";
+  } else if (type === "expense" || type === "debt payment") {
+    cls = " neg";
+    sign = "-";
+  }
+  var title = t.type;
+  if (type === "expense") title = t.category && t.category !== "N/A" ? t.category : "Expense";
+  if (type === "debt payment") title = "Debt payment · " + t.to;
+  var route = [t.from, t.to].filter(function (x) {
+    return x && x !== "N/A";
+  }).join(" → ");
+  var sub = [route, extra].filter(function (x) {
+    return x;
+  }).join(" · ");
+  return '<div class="row"><div class="left"><div class="name">' + esc(title) + '</div><div class="muted small">' + esc(sub) + '</div></div><span class="amount' + cls + '">' + sign + money(t.amount) + "</span></div>";
+}
+
+function renderHome() {
+  var accounts = (state.accounts || []).filter(function (a) {
+    return a.name.toLowerCase() !== CARD_NAME;
+  });
+  var total = accounts.reduce(function (sum, a) {
+    return sum + (a.balance || 0);
+  }, 0);
+
+  $("totalAvailable").textContent = money(total);
+  $("totalAvailable").className = "big" + (total < 0 ? " neg" : "");
+
+  $("accounts").innerHTML = accounts.map(function (a) {
+    return '<div class="row"><span class="name">' + esc(a.name) + '</span><span class="amount' + (a.balance < 0 ? " neg" : "") + '">' + money(a.balance) + "</span></div>";
+  }).join("") || '<p class="muted">No accounts found.</p>';
+
+  renderCard();
+  renderUpcoming();
+  renderRecent();
+}
+
+function renderCard() {
+  var cc = state.creditCard;
+  if (!cc || !cc.limit) {
+    $("card").innerHTML = '<p class="muted">No credit card data.</p>';
+    return;
+  }
+  var owed = cc.totalOwed || 0;
+  var pct = Math.max(0, Math.min(100, (owed / cc.limit) * 100));
+  var html = '<div class="row"><span class="name">Available credit</span><span class="amount">' + money(cc.available) + "</span></div>" +
+    '<div class="row"><span class="name">Total owed</span><span class="amount">' + money(owed) + "</span></div>" +
+    '<div class="bar"><div style="width:' + pct.toFixed(1) + '%"></div></div>' +
+    '<p class="muted small" style="margin:0">' + pct.toFixed(0) + "% of your " + money(cc.limit) + " limit</p>";
+
+  var statements = state.statements || [];
+  if (statements.length) {
+    var last = statements[statements.length - 1];
+    html += '<div class="row" style="margin-top:10px"><span class="name">Last statement</span><span class="amount">' + money(last.statementBalance) + "</span></div>" +
+      '<p class="muted small" style="margin:0">Due ' + esc(shortDate(last.dueDate)) + "</p>";
+  }
+  $("card").innerHTML = html;
+}
+
+function nextDue(item, now) {
+  var year = now.getFullYear();
+  var month = now.getMonth();
+  var monthKey = year + "-" + pad(month + 1);
+  var todayStart = new Date(year, month, now.getDate());
+  var lastDay = new Date(year, month + 1, 0).getDate();
+  var date = new Date(year, month, Math.min(item.day, lastDay));
+  if (item.lastLogged === monthKey || date < todayStart) {
+    var nextLastDay = new Date(year, month + 2, 0).getDate();
+    date = new Date(year, month + 1, Math.min(item.day, nextLastDay));
+  }
+  return date;
+}
+
+function renderUpcoming() {
+  var now = new Date();
+  var today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  var items = (state.recurring || [])
+    .filter(function (r) {
+      return String(r.active).toLowerCase() === "yes" && r.day >= 1 && r.day <= 31 && r.amount > 0;
+    })
+    .map(function (r) {
+      return { name: r.name, amount: r.amount, date: nextDue(r, now) };
+    })
+    .sort(function (a, b) {
+      return a.date - b.date;
+    })
+    .slice(0, 6);
+
+  $("upcoming").innerHTML = items.map(function (item) {
+    var days = Math.round((item.date - today) / 86400000);
+    var label = days === 0 ? "Today" : days === 1 ? "Tomorrow" : "In " + days + " days";
+    var when = item.date.toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" });
+    return '<div class="row"><div class="left"><div class="name">' + esc(item.name) + '</div><div class="muted small">' + esc(when) + " · " + label + '</div></div><span class="amount">' + money(item.amount) + "</span></div>";
+  }).join("") || '<p class="muted">No upcoming charges.</p>';
+}
+
+function renderRecent() {
+  var list = (state.transactions || []).slice().sort(function (a, b) {
+    return new Date(b.date) - new Date(a.date);
+  }).slice(0, 8);
+
+  $("recent").innerHTML = list.map(function (t) {
+    return txRowHtml(t, shortDate(t.date));
+  }).join("") || '<p class="muted">No transactions yet.</p>';
+}
+
+function fillSelect(id, options, allLabel) {
+  var el = $(id);
+  var current = el.value || "all";
+  el.innerHTML = '<option value="all">' + esc(allLabel) + "</option>" + options.map(function (o) {
+    return '<option value="' + esc(o) + '">' + esc(o) + "</option>";
+  }).join("");
+  el.value = options.indexOf(current) !== -1 ? current : "all";
+}
+
+function populateFilters() {
+  var accounts = (state.accounts || []).map(function (a) {
+    return a.name;
+  }).sort(function (a, b) {
+    return a.localeCompare(b);
+  });
+
+  var seen = {};
+  (state.categories || []).forEach(function (c) {
+    if (String(c.type).toLowerCase() === "expense" && c.name) seen[c.name] = true;
+  });
+  (state.transactions || []).forEach(function (t) {
+    if (String(t.type).toLowerCase() === "expense" && t.category && t.category !== "N/A") seen[t.category] = true;
+  });
+  var categories = Object.keys(seen).sort(function (a, b) {
+    return a.localeCompare(b);
+  });
+
+  fillSelect("fAccount", accounts, "All accounts");
+  fillSelect("fCategory", categories, "All categories");
+
+  if (!filtersReady) {
+    $("fType").innerHTML = TYPE_OPTIONS.map(function (o) {
+      return '<option value="' + o[0] + '">' + o[1] + "</option>";
+    }).join("");
+    filtersReady = true;
+    applyPreset("month");
+  }
+}
+
+function applyPreset(name) {
+  var now = new Date();
+  var y = now.getFullYear();
+  var m = now.getMonth();
+  var today = new Date(y, m, now.getDate());
+  var from = "";
+  var to = "";
+  if (name === "month") {
+    from = ymd(new Date(y, m, 1));
+    to = ymd(today);
+  } else if (name === "lastmonth") {
+    from = ymd(new Date(y, m - 1, 1));
+    to = ymd(new Date(y, m, 0));
+  } else if (name === "30days") {
+    var s = new Date(today);
+    s.setDate(s.getDate() - 29);
+    from = ymd(s);
+    to = ymd(today);
+  } else if (name === "year") {
+    from = ymd(new Date(y, 0, 1));
+    to = ymd(today);
+  }
+  $("fFrom").value = from;
+  $("fTo").value = to;
+  document.querySelectorAll("#presetChips .chip").forEach(function (c) {
+    c.classList.toggle("active", c.dataset.preset === name);
+  });
+  renderTransactions();
+}
+
+function clearPreset() {
+  document.querySelectorAll("#presetChips .chip").forEach(function (c) {
+    c.classList.remove("active");
+  });
+}
+
+function renderTransactions() {
+  if (!state) return;
+
+  var from = $("fFrom").value ? new Date($("fFrom").value + "T00:00:00") : null;
+  var to = $("fTo").value ? new Date($("fTo").value + "T23:59:59.999") : null;
+  var type = $("fType").value || "all";
+  var account = $("fAccount").value || "all";
+  var category = $("fCategory").value || "all";
+
+  var list = (state.transactions || []).filter(function (t) {
+    var d = new Date(t.date);
+    if (isNaN(d.getTime())) return false;
+    if (from && d < from) return false;
+    if (to && d > to) return false;
+    if (type !== "all" && String(t.type).toLowerCase() !== type) return false;
+    if (account !== "all" && t.from !== account && t.to !== account) return false;
+    if (category !== "all" && t.category !== category) return false;
+    return true;
+  }).sort(function (a, b) {
+    return new Date(b.date) - new Date(a.date);
+  });
+
+  var income = 0;
+  var expenses = 0;
+  var debt = 0;
+  var byCategory = {};
+  list.forEach(function (t) {
+    var kind = String(t.type).toLowerCase();
+    var amount = t.amount || 0;
+    if (kind === "income") income += amount;
+    if (kind === "debt payment") debt += amount;
+    if (kind === "expense") {
+      expenses += amount;
+      var name = t.category && t.category !== "N/A" ? t.category : "Uncategorized";
+      byCategory[name] = (byCategory[name] || 0) + amount;
+    }
+  });
+  var net = income - expenses - debt;
+
+  $("sumIncome").textContent = money(income);
+  $("sumExpenses").textContent = money(expenses);
+  $("sumDebt").textContent = money(debt);
+  $("sumNet").textContent = money(net);
+  $("sumNet").className = "v" + (net < 0 ? " neg" : net > 0 ? " pos" : "");
+
+  var cats = Object.keys(byCategory).map(function (name) {
+    return { name: name, amount: byCategory[name] };
+  }).sort(function (a, b) {
+    return b.amount - a.amount;
+  });
+
+  $("byCategory").innerHTML = cats.map(function (c) {
+    var pct = expenses > 0 ? (c.amount / expenses) * 100 : 0;
+    return '<div class="cat"><div class="meta"><span>' + esc(c.name) + "</span><span>" + money(c.amount) + '</span></div><div class="bar"><div style="width:' + pct.toFixed(1) + '%"></div></div><div class="muted small">' + pct.toFixed(0) + "% of expenses</div></div>";
+  }).join("") || '<p class="muted">No expenses in this range.</p>';
+
+  $("listTitle").textContent = "Transactions (" + list.length + ")";
+
+  var currentYear = new Date().getFullYear();
+  var html = "";
+  var lastKey = "";
+  list.forEach(function (t) {
+    var d = new Date(t.date);
+    var key = d.toDateString();
+    if (key !== lastKey) {
+      var opts = { weekday: "short", month: "short", day: "numeric" };
+      if (d.getFullYear() !== currentYear) opts.year = "numeric";
+      html += '<div class="dayhead">' + esc(d.toLocaleDateString("en-US", opts)) + "</div>";
+      lastKey = key;
+    }
+    html += txRowHtml(t, d.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" }));
+  });
+  $("txList").innerHTML = html || '<p class="muted">No transactions match these filters.</p>';
+}
+
+importFromHash();
+
+document.querySelectorAll("[data-view]").forEach(function (b) {
+  b.addEventListener("click", function () {
+    showView(b.dataset.view);
+  });
+});
+
+document.querySelectorAll("#presetChips .chip").forEach(function (c) {
+  c.addEventListener("click", function () {
+    applyPreset(c.dataset.preset);
+  });
+});
+
+["fFrom", "fTo"].forEach(function (id) {
+  $(id).addEventListener("change", function () {
+    clearPreset();
+    renderTransactions();
+  });
+});
+
+["fType", "fAccount", "fCategory"].forEach(function (id) {
+  $(id).addEventListener("change", renderTransactions);
+});
+
+$("connectBtn").addEventListener("click", function () {
+  var url = $("inputUrl").value.trim();
+  var key = $("inputKey").value.trim();
+  if (!url || !key) {
+    $("setupMessage").textContent = "Enter both the web app URL and the secret key.";
+    return;
+  }
+  setSetting(KEY_URL, url);
+  setSetting(KEY_KEY, key);
+  loadData();
+});
+
+$("refreshBtn").addEventListener("click", loadData);
+
+$("disconnectBtn").addEventListener("click", function () {
+  setSetting(KEY_URL, "");
+  setSetting(KEY_KEY, "");
+  state = null;
+  showSetup("");
+});
+
+document.addEventListener("visibilitychange", function () {
+  if (!document.hidden && getSetting(KEY_URL)) loadData();
+});
+
+showView("home");
+loadData();
+</script>
+</body>
+</html>
