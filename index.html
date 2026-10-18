@@ -47,6 +47,7 @@ button,input,select{font:inherit}
 .row .amount{font-weight:700;white-space:nowrap}
 .bar{height:8px;border-radius:99px;background:var(--line);overflow:hidden;margin:12px 0 6px}
 .bar div{height:100%;background:var(--accent);border-radius:99px}
+.bar.over div{background:var(--bad)}
 .placeholder{padding:40px 20px;text-align:center;color:var(--muted)}
 .chips{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:14px}
 .chip{border:1px solid var(--line);background:var(--bg);color:var(--text);border-radius:99px;padding:7px 14px;font-weight:600;font-size:14px;cursor:pointer}
@@ -70,6 +71,11 @@ button,input,select{font:inherit}
 .seg button.active{background:var(--accent);color:#fff}
 .legend{display:flex;gap:16px;margin-top:10px;font-size:13px;color:var(--muted)}
 .dot{display:inline-block;width:10px;height:10px;border-radius:3px;margin-right:6px}
+.bud-head{display:flex;justify-content:space-between;align-items:center;gap:12px;margin-bottom:2px}
+.bud-head .t{font-size:18px;font-weight:800}
+.pill{display:inline-block;padding:3px 10px;border-radius:99px;font-size:12px;font-weight:700;border:1px solid var(--line);white-space:nowrap}
+.pill.ok{color:var(--good)}
+.pill.warn{color:var(--bad)}
 .c-good{fill:var(--good)}
 .c-bad{fill:var(--bad)}
 .c-muted{fill:var(--muted)}
@@ -211,7 +217,24 @@ button,input,select{font:inherit}
       </div>
     </section>
 
-    <section id="view-budget" class="hidden"><div class="card placeholder">Budget is coming soon.</div></section>
+    <section id="view-budget" class="hidden">
+      <div class="card hero">
+        <div id="budMonth" class="label">–</div>
+        <div id="budToday" class="big">–</div>
+        <div class="muted small">Total daily allowance for today across your budgets</div>
+        <div id="budTodaySub" class="muted small" style="margin-top:4px"></div>
+      </div>
+
+      <div class="summary">
+        <div class="stat"><div class="k">Total budget</div><div id="budTotal" class="v">–</div></div>
+        <div class="stat"><div class="k">Spent</div><div id="budSpent" class="v neg">–</div></div>
+        <div class="stat"><div class="k">Remaining</div><div id="budLeft" class="v">–</div></div>
+        <div class="stat"><div class="k">Days left</div><div id="budDays" class="v">–</div></div>
+      </div>
+
+      <div id="budCards" class="grid"></div>
+      <p id="budNote" class="muted small"></p>
+    </section>
 
     <div class="foot"><button id="disconnectBtn" class="link small">Disconnect this device</button></div>
   </main>
@@ -334,6 +357,7 @@ function showView(name) {
   $("pageTitle").textContent = TITLES[name];
   window.scrollTo(0, 0);
   if (name === "statistics" && state) renderStatistics();
+  if (name === "budget" && state) renderBudget();
 }
 
 function setStatus(text) {
@@ -376,6 +400,7 @@ function render() {
   renderHome();
   renderTransactions();
   renderStatistics();
+  renderBudget();
 }
 
 function txRowHtml(t, extra) {
@@ -875,6 +900,108 @@ function renderStatistics() {
   $("statTop").innerHTML = top.map(function (t) {
     return txRowHtml(t, shortDate(t.date));
   }).join("") || '<p class="muted">No expenses in this range.</p>';
+}
+
+function renderBudget() {
+  if (!state) return;
+
+  var now = new Date();
+  var y = now.getFullYear();
+  var m = now.getMonth();
+  var lastDay = new Date(y, m + 1, 0).getDate();
+  var daysLeft = lastDay - now.getDate() + 1;
+  var monthStart = new Date(y, m, 1);
+  var monthEnd = endOfDay(new Date(y, m, lastDay));
+  var todayStart = startOfDay(now);
+  var elapsed = now.getDate() / lastDay;
+
+  var budgets = (state.categories || []).filter(function (c) {
+    return String(c.type).toLowerCase() === "expense" && c.budget > 0;
+  }).sort(function (a, b) {
+    return a.name.localeCompare(b.name);
+  });
+
+  var spent = {};
+  var spentToday = {};
+  (state.transactions || []).forEach(function (t) {
+    if (String(t.type).toLowerCase() !== "expense") return;
+    var d = new Date(t.date);
+    if (isNaN(d.getTime()) || d < monthStart || d > monthEnd) return;
+    var name = t.category && t.category !== "N/A" ? t.category : "Uncategorized";
+    spent[name] = (spent[name] || 0) + (t.amount || 0);
+    if (d >= todayStart) spentToday[name] = (spentToday[name] || 0) + (t.amount || 0);
+  });
+
+  $("budMonth").textContent = now.toLocaleDateString("en-US", { month: "long", year: "numeric" });
+  $("budDays").textContent = String(daysLeft);
+
+  if (!budgets.length) {
+    $("budToday").textContent = "–";
+    $("budTodaySub").textContent = "";
+    $("budTotal").textContent = "–";
+    $("budSpent").textContent = "–";
+    $("budLeft").textContent = "–";
+    $("budCards").innerHTML = '<div class="card placeholder wide">No budgets yet. Add a Monthly Budget next to an expense category in the Categories tab of your sheet.</div>';
+    $("budNote").textContent = "";
+    return;
+  }
+
+  var budgeted = {};
+  var totalBudget = 0;
+  var totalSpent = 0;
+  var totalAllowance = 0;
+  var totalToday = 0;
+  var cards = [];
+
+  budgets.forEach(function (c) {
+    budgeted[c.name] = true;
+    var b = c.budget;
+    var s = spent[c.name] || 0;
+    var st = spentToday[c.name] || 0;
+    var remaining = b - s;
+    var allowance = Math.max(0, (b - (s - st)) / daysLeft);
+    var leftToday = allowance - st;
+    var tomorrow = daysLeft > 1 ? Math.max(0, remaining) / (daysLeft - 1) : null;
+    var pct = Math.min(100, (s / b) * 100);
+
+    totalBudget += b;
+    totalSpent += s;
+    totalAllowance += allowance;
+    totalToday += st;
+
+    var pillClass = "ok";
+    var pillText = "On track";
+    if (s > b) {
+      pillClass = "warn";
+      pillText = "Over budget";
+    } else if (s / b > elapsed + 0.05) {
+      pillClass = "warn";
+      pillText = "Spending fast";
+    }
+
+    cards.push('<div class="card">' +
+      '<div class="bud-head"><span class="t">' + esc(c.name) + '</span><span class="pill ' + pillClass + '">' + pillText + "</span></div>" +
+      '<div class="muted small">' + money(s) + " of " + money(b) + " spent</div>" +
+      '<div class="bar' + (s > b ? " over" : "") + '"><div style="width:' + pct.toFixed(1) + '%"></div></div>' +
+      '<div class="row"><span class="name">Remaining this month</span><span class="amount' + (remaining < 0 ? " neg" : "") + '">' + money(remaining) + "</span></div>" +
+      '<div class="row"><div class="left"><div class="name">Left to spend today</div><div class="muted small">Allowance ' + money(allowance) + " · spent " + money(st) + '</div></div><span class="amount' + (leftToday < 0 ? " neg" : "") + '">' + money(leftToday) + "</span></div>" +
+      '<div class="row"><div class="left"><div class="name">Tomorrow\'s allowance</div><div class="muted small">If you spend nothing more today</div></div><span class="amount">' + (tomorrow === null ? "–" : money(tomorrow)) + "</span></div>" +
+      "</div>");
+  });
+
+  $("budCards").innerHTML = cards.join("");
+  $("budToday").textContent = money(totalAllowance);
+  $("budTodaySub").textContent = "Spent today in budgeted categories: " + money(totalToday);
+  $("budTotal").textContent = money(totalBudget);
+  $("budSpent").textContent = money(totalSpent);
+  $("budLeft").textContent = money(totalBudget - totalSpent);
+  $("budLeft").className = "v" + (totalBudget - totalSpent < 0 ? " neg" : "");
+
+  var other = 0;
+  Object.keys(spent).forEach(function (name) {
+    if (!budgeted[name]) other += spent[name];
+  });
+  $("budNote").textContent = other > 0 ? "Spent this month in categories without a budget: " + money(other) : "";
 }
 
 importFromHash();
